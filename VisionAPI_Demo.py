@@ -3,6 +3,8 @@ import pandas as pd
 import csv
 from google.cloud import vision_v1
 from google.cloud.vision_v1 import types
+from numpy import random
+from pillow_utility import draw_borders, Image
 
 # Klucz weryfikacyjny
 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = r'ServiceAccountToken.json'
@@ -16,6 +18,7 @@ f = 'setagaya_small.jpeg'
 
 # Funkcja wykrywania tekstu
 def detectText(img):
+
     # Powiazanie sciezki i nazwy obrazu
     with io.open(img, 'rb') as image_file:
         content = image_file.read()
@@ -41,13 +44,16 @@ def detectText(img):
 
 # Funkcja klasyfikacji zdjecia
 def detectLabels(img):
+
+    # Powiazanie sciezki i nazwy obrazu
     with io.open(img, 'rb') as image_file:
         content = image_file.read()
+
     # Tworzy wystapienie obrazu
     image = vision_v1.types.Image(content=content)
 
     # Opisuje odpowiedz obrazu
-    response = client.text_detection(image=image)
+    response = client.label_detection(image=image)
     labels = response.label_annotations
     df = pd.DataFrame(columns = ['description', 'score', 'topicality'])
 
@@ -63,9 +69,46 @@ def detectLabels(img):
         )
     return df
 
+# Funkcja detekcji obiektu
+def detectObjects(img):
+
+    # Powiazanie sciezki i nazwy obrazu
+    with io.open(img, 'rb') as image_file:
+        content = image_file.read()
+
+    # Tworzy wystapienie obrazu
+    image = vision_v1.types.Image(content=content)
+
+    # Opisuje odpowiedz obrazu
+    response = client.object_localization(image=image)
+    localized_object_annotations = response.localized_object_annotations
+    pillow_image = Image.open(img)
+    df = pd.DataFrame(columns=['name', 'score'])
+
+    # Lokalizuje obiekty i tworzy obramowanie
+    for obj in localized_object_annotations:
+        df = df.append(
+            dict(
+                name=obj.name,
+                score=obj.score
+            ),
+            ignore_index=True)
+        
+        r, g, b = random.randint(150, 255), random.randint(
+            150, 255), random.randint(150, 255)
+
+        draw_borders(pillow_image, obj.bounding_poly, (r, g, b),
+                    pillow_image.size, obj.name, obj.score)
+
+    # Wypisuje ulamkowa pewnosc zlokalizowanych obiektow
+    print(df)
+
+    # Wyswietla obraz ze zlokalizowanymi obiektami
+    pillow_image.show()
 
 # Funkcja zapisywania ramek danych do pliku CSV
 def writeDataFrameToCSV(path, f):
+    
     # Wybiera sciezke i nazwe pliku ze zmiennych globalnych
     FOLDER_PATH = path
     FILE_NAME = f
@@ -79,4 +122,4 @@ def writeDataFrameToCSV(path, f):
     dataframe_2.to_csv("labels.csv")
 
 writeDataFrameToCSV(path, f)
-        
+detectObjects(os.path.join(path, f))
